@@ -1,0 +1,27 @@
+<h1>Listing trials</h1>
+
+<table>
+  <tr>
+    <th>Date</th>
+    <th>User</th>
+    <th>Name</th>
+    <th></th>
+    <th></th>
+    <th></th>
+  </tr>
+
+<% @trials.each do |trial| %>
+  <tr>
+    <td><%= trial.date %></td>
+    <td><%= trial.user_id %></td>
+    <td><%= trial.name %></td>
+    <td><%= link_to 'Show', trial %></td>
+    <td><%= link_to 'Edit', edit_trial_path(trial) %></td>
+    <td><%= link_to 'Destroy', trial, method: :delete, data: { confirm: 'Are you sure?' } %></td>
+  </tr>
+<% end %>
+</table>
+
+<br />
+
+<%= link_to 'New Trial', new_trial_path %>

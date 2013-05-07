@@ -1,0 +1,22 @@
+<p id="notice"><%= notice %></p>
+
+<p>
+  <b>Date:</b>
+  <%= @trial.date %>
+</p>
+
+<p>
+  <b>User:</b>
+  <%= @trial.user_id %>
+</p>
+
+<p>
+  <b>Name:</b>
+  <%= @trial.name %>
+</p>
+
+	<% @trial.measurements.each do |p| %>
+		<p><%= p.grade %></p>
+		<%end%>
+<%= link_to 'Edit', edit_trial_path(@trial) %> |
+<%= link_to 'Back', trials_path %>

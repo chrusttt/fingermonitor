@@ -1,0 +1,11 @@
+# Read about fixtures at http://api.rubyonrails.org/classes/ActiveRecord/Fixtures.html
+
+one:
+  grade: 1.5
+  date: 2013-05-05 11:11:10
+  trial_id: 
+
+two:
+  grade: 1.5
+  date: 2013-05-05 11:11:10
+  trial_id: 
