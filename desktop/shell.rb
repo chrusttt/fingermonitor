@@ -26,12 +26,26 @@ class ShellUI < HighLine
         end
     end
 
+    def measurement_request(measurements, hydra)
+        measurements.each do |measurement|
+                request = Typhoeus::Request.new(
+                              "http://localhost:3000/measurements.json?auth_token=#{@user[:token]}",
+                              method:        :post,
+                              body:           measurement.to_json, 
+                              headers:        {"Content-Type" => "application/json"}
+                            )
+                            hydra.queue request
+                end
+                hydra.run
+    end
+
+
     def new_trial
         name = ask("Title: ", String)
         date = DateTime.now
-        trial = Trial.new(name, date, @credentials[:user_id])
+        trial = Trial.new(name, date, @user[:user_id])
         request = Typhoeus::Request.new(
-          "http://localhost:3000/trials.json?auth_token=#{@credentials[:token]}",
+          "http://localhost:3000/trials.json?auth_token=#{@user[:token]}",
           method:        :post,
           body:        trial.to_params.to_json, 
           headers:        {"Content-Type" => "application/json"}
@@ -41,19 +55,29 @@ class ShellUI < HighLine
         return response["id"]
     end  
 
+    def authenticated?
+       @user
+    end
+
     public
     
+    User = Struct.new(:email, :password, :token, :user_id)
+
     usage 'Usage: login'
     desc 'Get authetication token from API'
     def login(params)
-        email = ask("Login:", String)
-        password = ask("Enter your password:", String) { |q| q.echo = "x" }
-        if token_request(email, password)
-            token = token_request(email, password) 
-            @credentials = { email: email, password: password, token: token["token"], user_id: token["user_id"] }
-            puts "Logged in as #{email} #{token["user_id"]}"
-        else 
-            puts "Login failed"
+        unless authenticated?
+            email = ask("Login: ", String)
+            password = ask("Enter your password: ", String) { |q| q.echo = "x" }
+            if token_request(email, password)
+                token = token_request(email, password) 
+                @user = User.new(email, password, token["token"], token["user_id"])
+                puts "Logged in as #{email}"
+            else 
+                puts "Login failed"
+            end
+        else
+            puts "You are already logged in as #{@user[:email]}"
         end
     end
 
@@ -64,55 +88,46 @@ class ShellUI < HighLine
     usage 'Usage: start_trial'
     desc 'Start new trial and post it to the server'
     def start_trial(params)
-        trial = new_trial
-        puts "Loading arduino .."
-        arduino = ArduinoFirmata.connect
-        hydra = Typhoeus::Hydra.new
-        t = Thread.new do
-        until gets.chomp == "stop"; end
-          # "Label" this thread finished
-          Thread.current[:should_stop] = true
-        end
-        grades = []
-        measurements = []
-        puts "Program started"
-        loop do
-            sleep 2
-            arduino.on :analog_read do |pin, value|
-                if pin == 0
-                    if grades.count == 30
-                        sum = 0
-                        grades.each {|grade| sum = sum + grade }
-                        grades.clear
-                        measurements << {"measurement" => {"grade" => sum/30, "date" => DateTime.now.httpdate, "trial_id" => trial}}         
-                    else
-                        grades << value
-                        puts grades.count
+        if authenticated?
+            trial = new_trial
+            puts "Loading arduino .."
+            arduino = ArduinoFirmata.connect
+            hydra = Typhoeus::Hydra.new
+            grades = []
+            measurements = []
+
+            t = Thread.new do
+            until gets.chomp == "stop"; end
+              # "Label" this thread finished
+              Thread.current[:should_stop] = true
+            end
+           
+            puts "Program started"
+
+            loop do
+                sleep 5
+                arduino.on :analog_read do |pin, value|
+                    if pin == 0
+                        if grades.count == 60
+                            sum = 0
+                            grades.each {|grade| sum = sum + grade }
+                            grades.clear
+                            measurements << {"measurement" => {"grade" => sum/30, "date" => DateTime.now.httpdate, "trial_id" => trial}}         
+                        else
+                            grades << value
+                        end
                     end
                 end
-            end
-            measurements.each do |measurement|
-            request = Typhoeus::Request.new(
-                          "http://localhost:3000/measurements.json?auth_token=#{@credentials[:token]}",
-                          method:        :post,
-                          body:           measurement.to_json, 
-                          headers:        {"Content-Type" => "application/json"}
-                        )
-                        hydra.queue request
-            end
-            hydra.run
-            measurements.clear
-            # Exit the loop if the listening thread has been "marked" as finished
-            break if t[:should_stop]
-        end 
-
-    end
-
-    usage 'Usage: cd <Directory>'
-    desc 'Change current directory'
-    def cd(params)
-        trial = new_trial
-        puts trial
+                
+                measurement_request(measurements, hydra)
+                measurements.clear
+                # Exit the loop if the listening thread has been "marked" as finished
+                break if t[:should_stop]
+            end 
+        else 
+            login(1)
+        end
+        arduino.close
     end
 
 end
@@ -123,7 +138,6 @@ console = CLI::Console.new(io)
 
 console.addCommand('login', shell.method(:login), 'User authetication')
 console.addCommand('start_trial', shell.method(:start_trial), 'Start monitoring hand movement')
-console.addCommand('cd', shell.method(:cd), 'Change directory')
 console.addHelpCommand('help', 'Help')
 console.addExitCommand('exit', 'Exit from program')
 console.addAlias('quit', 'exit')
